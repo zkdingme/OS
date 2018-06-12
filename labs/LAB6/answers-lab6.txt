@@ -1,0 +1,27 @@
+1. How did you structure your transmit implementation? In particular, what do you do if the transmit ring is full? 
+首先，在output.c中，接收nsipcbuf，获得其中的data地址以及长度，将这两者传入sys_transmit_packet中，并且不断循环来发送包。在sys_transmit中，构建一个tx_desc的对象，将data地址转成物理地址放进对象中，再把len也放入对象中。
+之后，调用transmit_packet，将td的地址作为参数传入。在transmit_packet中，获得tdt，找到其在tx_table（TX ring）中的td，将原先的td赋给这个td，并修改器cmd中的值，并将tdt往后推延一个，这样就完成了transmit过程。
+特别地，当tx ring满的时候，transmit_packet会返回-1，这时候，在sys_transmit_packet会对transmit_packet返回值进行判断，本来是不断循环，遇到返回值为0则break跳出；若为-1，则继续循环，直至tx ring空闲。
+
+2. How did you structure your receive implementation? In particular, what do you do if the receive queue is empty and a user environment requests the next incoming packet? 
+我在初始化rx_table（RX ring）的同时，也初始化了一个rx_buf，用来当作每个rx_desc的地址。在初始化rx_table的同时，将rx_table中的buffer_addr设为rx_buf中对应数组的地址。
+在intput.c中，调用sys_receive_packet，获得buf的地址和长度。通过memmove，将data的内容copy到指定的地址，并通过ipc_send发送给core network进程。
+在sys_receive_packet中，构建一个rx_desc的对象，并将其指针作为参数传给receive_packet函数，获得rd。将rd中的地址通过KADDR转为虚拟地址，再将内容memset到buf的地址。
+在receive_packet中，将(*rdt + 1) % RXDESC_LENGTH作为读取的对象，从rx_table中读取相应的rd。同时，清空该rd的DD位和EOP位，告诉e1000这块区域可以重新使用，并更新rdt，这样就完成了receive过程。
+特别地，当rx_ring为空的时候，会返回-1，sys_receive_packet也会返回-1。在input.c中，如果返回值小于0，则在循环中调用sys_yield，否则不符合条件，跳出循环，这样就实现了一直等待接收的效果。
+
+3. What does the web page served by JOS's web server say?
+当输入http://localhost:26002/index.html后，显示
+
+4. How long approximately did it take you to do this lab? 
+差不多25-30小时。
+
+Challenge:
+实现了load MAC。
+加一个sys_get_mac的syscall即可。
+static int
+sys_get_mac(unit32_t* low, uint32_t* high){
+   *low = e1000[E1000_RAL];
+   *high= e1000[E1000_RAH] & 0xffff;
+   return 0;
+}

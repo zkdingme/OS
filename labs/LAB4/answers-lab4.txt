@@ -1,0 +1,52 @@
+Question 1:
+答：因为lgdt载入的应为gdt的物理地址。在boot.S中，在载入gdt时都还在保护模式，没有开启页表，因此本身的地址就是物理地址。而在mpentry.S中，若直接使用gdt,显然得到的不是物理地址。由于mpentry.S的代码是链接到KERNBASE之上的，要想获得实际的物理地址，就要用MPBOOTPHYS宏来计算。将内核的线性地址减去mpentry_start，再加上物理起始地址0x7000，才是gdt的物理地址。
+
+Question 2:
+答：首先，在调用lock_kernel之前，CPU已经处于内核态了，在这之前，如果不同CPU有操作内核栈的举动，有很有可能引起混乱。其次，每个CPU可能会在内存栈中保留未来可能会用到的数据，如果不同CPU共享同一个内核栈，就一定会出现覆盖或数据丢失的情况，因此，需要为不同的CPU创建不同的内核栈。
+
+Question 3:
+答：因为当前处于内核态，运行的是kernel段的代码。e位于内核地址空间，对于不同的页表，都对于内核地址空间有相同的映射（位于UTOP之上）。因此，无论是否切换页表，对于内核地址空间的映射都是不变的，所以在lcr3前后都可以正常的使用。
+
+
+Challenge：
+
+实现了第二个challenge，也就是基于优先级的调度。
+实现如下：
+1. 在inc/env.h 加入 env_prior
+2. 在inc/lib.h 添加函数声明
+3. 在kern/syscall.c 里面添加sts_env_set_status函数
+4. 在inc/syscall.h 里面添加中断号
+5. 在lib/syscall.c 里面添加系统调用
+6. 在kern/sched.c 添加调度优先级代码
+7. 在user里面添加prior.c
+8. 在kern/makefrag 里面添加user/prior 
+
+运行 make run-prior
+结果如下：
+[00000000] new env 00001000
+[00000000] new env 00001001
+[00000000] new env 00001002
+[00000000] new env 00001003
+[00000000] new env 00001004
+[00000000] new env 00001005
+[00000000] new env 00001006
+[00000000] new env 00001007
+[00000000] new env 00001008
+[00001008] new env 00001009
+[00001008] new env 0000100a
+[00001009] HIGH PRIOR 0 iteration
+[0000100a] LOW PRIOR 0 iteration
+[00001009] HIGH PRIOR 1 iteration
+[00001009] HIGH PRIOR 2 iteration
+[0000100a] LOW PRIOR 1 iteration
+[00001008] exiting gracefully
+[00001008] free env 00001008
+[0000100a] LOW PRIOR 2 iteration
+[0000100a] exiting gracefully
+[0000100a] free env 0000100a
+[00001009] exiting gracefully
+[00001009] free env 00001009
+证明可行
+
+注：测试challenge需要把kern/sched.c里面注释的代码去除注释，然后注释掉default即可
+ 

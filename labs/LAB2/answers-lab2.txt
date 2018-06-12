@@ -1,0 +1,75 @@
+Question 1:
+是 uintptr_t因为程序里面只会存在虚拟地址。
+
+Question 2:
+Entry	Base Virtual Address	Points to(logically)
+1023	0xffc00000	Page table for top 4MB of phys memory
+		
+960	0xf0000000	PA range [0, 2^32 - KERNBASE)( Page table for bottom 4MB of phys memory)
+		
+958	0xef800000	Kernel stack,actually,0xef800000-0xefbf8000 is guard page
+                        0xefbf8000 -0xefc00000 is kernel stack
+957	0xef400000	Page directory
+956	0xef000000	Page arrays 
+		
+2	0x00800000	
+1	0x00400000	
+0	0x00000000	
+
+Question 3:
+虚拟地址的低12位里面有权限位PTE_U, MMU在做地址翻译的时候会检查这一位，检查用户是否有权限访问该地址
+
+Question 4:
+当前OS的物理内存是256MB，不过按pages = boot_alloc(npages * sizeof(struct Page)); pages大小是4MB的能力来说，是可以支持(4MB/8byte)*4K = 2G
+
+Question 5:
+管理当前内存：当前物理内存66556K，就是16639个page，需要17个二级页表
+              及 4k(PD) + 68k(PT) + 4MB(pages) = 4MB + 72k
+管理2G内存所需的内存：4k(PD) + 2M(PT) + 4MB(pages) = 6MB + 4K
+
+Question 6:
+什么时候above KERNBASE： 在entry.S第67行 
+When low EIP: 因为在entrypgdir里面，同一个物理页对应两个虚拟页，一个高地址，一个低地址。
+Why： 因为在内核地址空间, EIP要小于KNERBASE。
+
+
+我选做challenge 2:
+我通过在monitor.c里面实现三个函数mon_showmappings, mon_setpermissions, mon_memdump来完成challenge2.
+在mon_showmappings函数里面，我通过page_walk函数获取相应虚拟地址的物理地址，并检查对应的权限位，最终结果如下：
+K> showmappings 0xef000000 0xef004000
+0xef000000 -> 0x0011a000 U 
+0xef001000 -> 0x0011b000 U 
+0xef002000 -> 0x0011c000 U 
+0xef003000 -> 0x0011d000 U 
+0xef004000 -> 0x0011e000 U 
+0xef005000 -> 0x0011e000 U 
+
+在mon_setpermissions函数里面，我设定的输入格式是 setpermissions [perm] 0/1  va, 然后在函数里面修改va对应的物理地址相应权限位的值，结果如下：
+K> showmappings 0xef000000 0xef004000
+0xef000000 -> 0x0011a000 U 
+0xef001000 -> 0x0011b000 U 
+0xef002000 -> 0x0011c000 U 
+0xef003000 -> 0x0011d000 U 
+0xef004000 -> 0x0011e000 U 
+0xef005000 -> 0x0011e000 U 
+K> setpermissions PTE_U 0 0xef000000
+K> showmappings 0xef000000 0xef004000
+0xef000000 -> 0x0011a000 
+0xef001000 -> 0x0011b000 U 
+0xef002000 -> 0x0011c000 U 
+0xef003000 -> 0x0011d000 U 
+0xef004000 -> 0x0011e000 U 
+0xef005000 -> 0x0011e000 U 
+可以看到0xef000000对应物理地址的PTE_U权限位没了
+
+在mon_memdump函数里面，我设定的输入格式是 memdump p/v addr addr, 如果是虚拟地址，就直接取该地址范围内的值，如果是物理地址，就把地址加上KERNBASE
+然后再取值。在物理地址这里，可能会发生地址范围超过范围的情况，所以我做了一个检查，当物理地址大于0x0fffffff的时候，停止输出，具体结果如下：
+
+K> memdump v 0xf0100000 0xf0100004
+02ffffffb0ffffffad1b
+K> memdump p 1 6
+ffffffff00fffffff053ffffffff
+
+
+
+
